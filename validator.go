@@ -1,6 +1,5 @@
 package validator
 
-//
 import (
 	"errors"
 	"fmt"
