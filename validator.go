@@ -63,7 +63,7 @@ func (ctx *ValidationContext) Must(fnc func() bool) *ValidationContext {
 	return ctx
 }
 
-func ValidateStruct[T any](v *Validator, s T) error {
+func (v *Validator) ValidateStruct(s any) error {
 	typ := reflect.TypeOf(s)
 
 	handler, ok := v.typeHandlers[typ]
@@ -79,7 +79,7 @@ func ValidateStruct[T any](v *Validator, s T) error {
 	return ctx.err
 }
 
-func New() *Validator { //
+func New() *Validator { ////
 	validator := &Validator{
 		rules:        make(map[string]RuleFunc, 0),
 		typeHandlers: make(map[reflect.Type]HandlerFunc, 0),
