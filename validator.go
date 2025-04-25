@@ -79,7 +79,7 @@ func ValidateStruct[T any](v *Validator, s T) error {
 	return ctx.err
 }
 
-func New() *Validator {
+func New() *Validator { //
 	validator := &Validator{
 		rules:        make(map[string]RuleFunc, 0),
 		typeHandlers: make(map[reflect.Type]HandlerFunc, 0),
