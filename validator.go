@@ -80,7 +80,10 @@ func ValidateStruct[T any](v *Validator, s T) error {
 }
 
 func New() *Validator {
-	validator := &Validator{}
+	validator := &Validator{
+		rules:        make(map[string]RuleFunc, 0),
+		typeHandlers: make(map[reflect.Type]HandlerFunc, 0),
+	}
 	RegisterRule(validator, "notEmpty", func(param []any) error {
 		for _, p := range param {
 
