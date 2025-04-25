@@ -245,7 +245,7 @@ func New() *Validator {
 			!textBeforeAmp ||
 			!dotAfterAmp ||
 			otherError {
-			return errors.New("Email addresses must be valid, working, and must have no commas or spaces")
+			return errors.New("email addresses must be valid, working, and must have no commas or spaces")
 		}
 
 		return nil
