@@ -7,38 +7,25 @@ import (
 	"strings"
 )
 
-type HandlerFunc func(*ValidationContext)
-type RuleFunc func(param []any) error
-
-func ValidateStruct[T any](s T) error {
-	typ := reflect.TypeOf(s)
-
-	handler, ok := typeHandlers[reflect.TypeOf(s)]
-	if !ok {
-		panic("Type \"" + typ.Name() + "\" Hasn't been registered with RegisterType")
-	}
-
-	ctx := ValidationContext{}
-	handler(s, &ctx)
-
-	return ctx.err
-}
-
-var rules = make(map[string]RuleFunc, 0)
-var typeHandlers = make(map[reflect.Type]func(a any, ctx *ValidationContext), 0)
-
-func RegisterRule(ruleName string, fnc RuleFunc) {
-	rules[ruleName] = fnc
-}
-
-func RegisterType[T any](handler func(s T, ctx *ValidationContext)) {
-	typeHandlers[reflect.TypeFor[T]()] = func(a any, ctx *ValidationContext) {
-		handler(a.(T), ctx)
-	}
-}
-
 type ValidationContext struct {
-	err error
+	validator *Validator
+	err       error
+}
+type HandlerFunc func(a any, ctx *ValidationContext)
+type RuleFunc func(param []any) error
+type Validator struct {
+	rules        map[string]RuleFunc
+	typeHandlers map[reflect.Type]HandlerFunc
+}
+
+func RegisterRule(v *Validator, ruleName string, fnc RuleFunc) {
+	v.rules[ruleName] = fnc
+}
+
+func RegisterType[T any](v *Validator, handler func(s T, ctx *ValidationContext)) {
+	v.typeHandlers[reflect.TypeFor[T]()] = func(a any, cc *ValidationContext) {
+		handler(a.(T), cc)
+	}
 }
 
 func (ctx *ValidationContext) Message(message string) *ValidationContext {
@@ -50,27 +37,17 @@ func (ctx *ValidationContext) Message(message string) *ValidationContext {
 }
 
 func (ctx *ValidationContext) Check(handlerName string, params ...any) *ValidationContext {
-
 	if ctx.err != nil {
 		return ctx
 	}
 
-	rule, ok := rules[handlerName]
+	rule, ok := ctx.validator.rules[handlerName]
 	if !ok {
-		panic("Rule " + handlerName + " has not been registered")
+		panic("Rule " + handlerName + " has not been registered to specified validator")
 	}
 
 	err := rule(params)
 	ctx.err = err
-	return ctx
-}
-
-func (ctx *ValidationContext) MustErr(fnc func() error) *ValidationContext {
-	if ctx.err != nil {
-		return ctx
-	}
-
-	ctx.err = fnc()
 	return ctx
 }
 
@@ -86,23 +63,32 @@ func (ctx *ValidationContext) Must(fnc func() bool) *ValidationContext {
 	return ctx
 }
 
-func Init() {
-	RegisterRule("notEmpty", func(param []any) error {
+func New() *Validator {
+	validator := &Validator{}
+	RegisterRule(validator, "notEmpty", func(param []any) error {
 		for _, p := range param {
-			str, ok := p.(string)
-			if !ok {
-				continue
+
+			length := 0
+			rv := reflect.ValueOf(p)
+			kind := rv.Kind()
+
+			if kind == reflect.Array ||
+				kind == reflect.Slice ||
+				kind == reflect.Map {
+				length = rv.Len()
+			} else if kind == reflect.String {
+				length = len(strings.TrimSpace(p.(string)))
 			}
 
-			if len(strings.TrimSpace(str)) == 0 {
-				return errors.New("rule required failed")
+			if length == 0 {
+				return errors.New("required rule failed")
 			}
 		}
 
 		return nil
 	})
 
-	RegisterRule("greaterThan", func(params []any) error {
+	RegisterRule(validator, "greaterThan", func(params []any) error {
 		// need at least two args: one comparer + at least one to compare
 		if len(params) < 2 {
 			msg := fmt.Sprintf("greaterThan: expected at least 2 parameters, got %d", len(params))
@@ -159,7 +145,7 @@ func Init() {
 		return nil
 	})
 
-	RegisterRule("lessThan", func(params []any) error {
+	RegisterRule(validator, "lessThan", func(params []any) error {
 		// need at least two args: one comparer + at least one to compare
 		if len(params) < 2 {
 			msg := fmt.Sprintf("lessThan: expected at least 2 parameters, got %d", len(params))
@@ -216,4 +202,54 @@ func Init() {
 		return nil
 	})
 
+	RegisterRule(validator, "isEmail", func(param []any) error {
+		if len(param) == 0 {
+			panic("No parameters passed to email rule")
+		}
+
+		email, ok := param[0].(string)
+		if !ok {
+			panic("Parameter passed to email rule is not a string")
+		}
+
+		var ampIsThere bool
+		var spacesThere bool
+		var textBeforeAmp bool
+		var textAfterAmp bool
+		var dotAfterAmp bool
+		var otherError bool
+
+		for _, r := range email {
+			if r == '@' {
+				if ampIsThere {
+					otherError = true
+				}
+
+				ampIsThere = true
+			} else if !ampIsThere {
+				textBeforeAmp = true
+			} else if r == '.' {
+				dotAfterAmp = true
+			} else {
+				textAfterAmp = true
+			}
+
+			if r == ' ' || r == ',' {
+				spacesThere = true
+			}
+		}
+
+		if spacesThere ||
+			!ampIsThere ||
+			!textAfterAmp ||
+			!textBeforeAmp ||
+			!dotAfterAmp ||
+			otherError {
+			return errors.New("Email addresses must be valid, working, and must have no commas or spaces")
+		}
+
+		return nil
+	})
+
+	return validator
 }
