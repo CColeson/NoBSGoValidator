@@ -63,6 +63,22 @@ func (ctx *ValidationContext) Must(fnc func() bool) *ValidationContext {
 	return ctx
 }
 
+func ValidateStruct[T any](v *Validator, s T) error {
+	typ := reflect.TypeOf(s)
+
+	handler, ok := v.typeHandlers[typ]
+	if !ok {
+		panic("type " + typ.Name() + " hasn't been registered with RegisterType")
+	}
+
+	ctx := ValidationContext{
+		validator: v,
+	}
+	handler(s, &ctx)
+
+	return ctx.err
+}
+
 func New() *Validator {
 	validator := &Validator{}
 	RegisterRule(validator, "notEmpty", func(param []any) error {
